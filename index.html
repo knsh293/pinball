@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>彈珠臺 - 分與合遊戲</title>
+    <style>
+        body {
+            margin: 0; padding: 0; 
+            display: flex; justify-content: center; align-items: flex-start;
+            min-height: 100vh; background-color: #222; 
+            font-family: 'Microsoft JhengHei', sans-serif;
+            overflow: hidden; touch-action: none;
+            padding-top: 5vh; 
+        }
+        
+        #game-board {
+            position: relative; 
+            width: 100vw; 
+            height: 80vh; 
+            max-height: 750px;
+            max-width: calc(80vh * (2/3)); 
+            background-color: #fdf6e3; 
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            border-radius: 20px;
+            overflow: visible; 
+        }
+
+        #bg-img {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: fill; z-index: 1; pointer-events: none; border-radius: 20px;
+        }
+
+        canvas {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 10; pointer-events: none;
+        }
+        
+        #plunger {
+            position: absolute; 
+            right: 4%; bottom: 2%; 
+            width: 10%; height: auto;
+            max-height: 25%; z-index: 20; 
+            cursor: grab; user-select: none; 
+            -webkit-user-drag: none; transform-origin: top center;
+        }
+        #plunger:active { cursor: grabbing; }
+        
+        .top-btn-group {
+            position: absolute; top: 2%; right: -25%; z-index: 30; 
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        @media (max-width: 800px) {
+            .top-btn-group { right: 2%; flex-direction: row; }
+        }
+        
+        .btn {
+            background: #ffc107; border: 2px solid #ff9800; padding: 6px 12px; border-radius: 8px;
+            font-weight: bold; cursor: pointer; box-shadow: 0 4px 0 #e65100; font-size: 14px; color: #333;
+            white-space: nowrap;
+        }
+        .btn:active { transform: translateY(4px); box-shadow: 0 0 0 #e65100; }
+
+        #question-panel {
+            position: absolute; top: 71%; left: 50%; transform: translate(-50%, -50%);
+            width: 85%; text-align: center; z-index: 40; display: none;
+        }
+
+        #question-text {
+            font-size: clamp(14px, 2.2vh, 18px); 
+            font-weight: 900; margin-bottom: 8px; color: #333; 
+            background-color: rgba(255, 255, 255, 0.95);
+            padding: 6px 12px; border-radius: 10px; display: inline-block;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.15); border: 2px solid #ddd;
+        }
+        
+        .split-layout { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+        .row { display: flex; gap: 15px; }
+        .box {
+            width: clamp(30px, 4.5vh, 45px); height: clamp(30px, 4.5vh, 45px);
+            border: 2px solid #555; border-radius: 10px; font-size: clamp(16px, 2.5vh, 22px);
+            display: flex; justify-content: center; align-items: center;
+            background: rgba(255, 255, 255, 0.95); cursor: pointer; font-weight: bold; color: #000;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .box.active { border-color: #03a9f4; box-shadow: 0 0 10px rgba(3, 169, 244, 0.6); }
+        .connect-lines { font-size: clamp(18px, 3vh, 24px); color: #444; font-weight: bold; margin: 0; line-height: 0.8; }
+        
+        #check-ans-btn {
+            margin-top: 10px; background: #4caf50; color: white; border: none; padding: 6px 16px;
+            border-radius: 8px; font-size: clamp(12px, 1.8vh, 16px); font-weight: bold; cursor: pointer; box-shadow: 0 3px 0 #2e7d32;
+        }
+        #check-ans-btn:active { transform: translateY(3px); box-shadow: 0 0 0 #2e7d32; }
+        
+        #feedback { 
+            margin-top: 8px; font-weight: 900; font-size: clamp(14px, 2vh, 18px); 
+            padding: 6px 12px; border-radius: 8px; display: none; 
+            width: fit-content; margin-left: auto; margin-right: auto;
+            box-shadow: 0 3px 5px rgba(0,0,0,0.1);
+        }
+
+        #keyboard-area {
+            position: fixed; bottom: -500px; left: 50%; transform: translateX(-50%); width: 100%; max-width: 600px;
+            background: #daced4; padding: 8px; box-sizing: border-box; z-index: 100; transition: bottom 0.3s;
+            display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; border-top-left-radius: 15px; border-top-right-radius: 15px;
+            box-shadow: 0 -5px 25px rgba(0,0,0,0.5);
+        }
+        #keyboard-area.open { bottom: 0; }
+        .key {
+            background: #fff; border-radius: 8px; padding: 10px 0; text-align: center; font-size: 20px; font-weight: bold;
+            cursor: pointer; box-shadow: 0 3px 0 #aaa; color: #333; user-select: none;
+        }
+        .key:active { transform: translateY(3px); box-shadow: 0 0 0 #aaa; }
+        .key.btn-del { background: #ff9800; color: white; box-shadow: 0 3px 0 #e65100; font-size: 14px; }
+        .key.btn-close { background: #f44336; color: white; box-shadow: 0 3px 0 #c62828; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+<div id="game-board">
+    <img id="bg-img" src="空白彈珠臺.png" alt="背景" onerror="this.onerror=null; this.src='空白彈珠臺.jpg';">
+    <canvas id="gameCanvas"></canvas>
+    <img id="plunger" src="拉桿.png" alt="拉桿" draggable="false" onerror="this.onerror=null; this.src='拉桿_2.png';">
+
+    <div class="top-btn-group">
+        <button class="btn" onclick="startGame(Math.floor(Math.random() * 6) + 5)">隨機布題</button>
+        <button class="btn" onclick="openCustomMode()">自訂布題</button>
+    </div>
+
+    <div id="question-panel">
+        <div id="question-text">5可以分成多少和多少？</div>
+        <div class="split-layout">
+            <div class="row"><div class="box" id="box-top" onclick="selectBox('box-top')"></div></div>
+            <div class="connect-lines">↙ ↘</div>
+            <div class="row">
+                <div class="box" id="box-left" onclick="selectBox('box-left')"></div>
+                <div class="box" id="box-right" onclick="selectBox('box-right')"></div>
+            </div>
+        </div>
+        <button id="check-ans-btn" onclick="verifyAnswer()">檢核答案</button>
+        <div id="feedback"></div>
+        <!-- 修改 onClick 事件為 startGame(totalBalls) 以延續目前關卡數量 -->
+        <button id="play-again-btn" class="btn" style="display:none; margin: 10px auto 0;" onclick="startGame(totalBalls)">再玩一次</button>
+    </div>
+</div>
+
+<div id="keyboard-area">
+    <div class="key" onclick="pressKey(0)">0</div>
+    <div class="key" onclick="pressKey(1)">1</div>
+    <div class="key" onclick="pressKey(2)">2</div>
+    <div class="key" onclick="pressKey(3)">3</div>
+    <div class="key" onclick="pressKey(4)">4</div>
+    <div class="key" onclick="pressKey(5)">5</div>
+    <div style="visibility: hidden;"></div>
+    
+    <div class="key btn-del" onclick="pressKey('del')">刪除</div>
+    <div class="key" onclick="pressKey(6)">6</div>
+    <div class="key" onclick="pressKey(7)">7</div>
+    <div class="key" onclick="pressKey(8)">8</div>
+    <div class="key" onclick="pressKey(9)">9</div>
+    <div class="key" onclick="pressKey(10)">10</div>
+    <div class="key btn-close" onclick="hideKeyboard()">關閉</div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const board = document.getElementById('game-board');
+    const plunger = document.getElementById('plunger');
+    
+    const marbleImg = new Image();
+    marbleImg.src = '彈珠.png';
+    marbleImg.onerror = function() { this.onerror = null; this.src = '彈珠.jpg'; };
+
+    let W, H;
+    let GRAVITY, FRICTION, BOUNCE, R;
+    let queueY, shootX, waitEndX;
+    let pegs = [];
+    let plungerDown = 0;
+
+    let L_WALL, R_WALL, DOME_X, DOME_Y, DOME_R, POCKET_FLOOR;
+    let chamberState = 'EMPTY'; 
+    let chamberBall = null; 
+    let lastFireTime = 0;
+
+    function updateSize() {
+        W = board.clientWidth; H = board.clientHeight;
+        canvas.width = W; canvas.height = H;
+        
+        GRAVITY = H * 0.0012; 
+        FRICTION = 0.99; 
+        BOUNCE = 0.6;
+        R = W * 0.024; 
+
+        queueY = H * 0.89;       
+        shootX = W * 0.91;       
+        waitEndX = W * 0.80;     
+
+        L_WALL = W * 0.12;       
+        R_WALL = W * 0.83;       
+        DOME_X = W * 0.48;       
+        DOME_Y = H * 0.65;       
+        DOME_R = W * 0.20;       
+        POCKET_FLOOR = H * 0.83; 
+
+        pegs = [
+            { x: W * 0.32, y: H * 0.22, r: R * 0.8 }, { x: W * 0.48, y: H * 0.22, r: R * 0.8 }, { x: W * 0.64, y: H * 0.22, r: R * 0.8 },
+            { x: W * 0.40, y: H * 0.32, r: R * 0.8 }, { x: W * 0.56, y: H * 0.32, r: R * 0.8 },
+            { x: W * 0.32, y: H * 0.42, r: R * 0.8 }, { x: W * 0.48, y: H * 0.42, r: R * 0.8 }, { x: W * 0.64, y: H * 0.42, r: R * 0.8 }
+        ];
+    }
+    window.addEventListener('resize', updateSize);
+
+    let totalBalls = 5, balls = [], gameState = 'IDLE'; 
+    let activeBox = null, isCustomMode = false;
+
+    function getPlungerTopY() {
+        let pRect = plunger.getBoundingClientRect();
+        let bRect = board.getBoundingClientRect();
+        return pRect.top - bRect.top; 
+    }
+
+    class Ball {
+        constructor(id, queueIndex) {
+            this.id = id; this.queueIndex = queueIndex; 
+            this.x = W * 0.2; this.y = queueY;
+            this.vx = 0; this.vy = 0; 
+            this.status = 'QUEUE'; 
+            this.inMainBoard = false; 
+            this.sleepFrames = 0;
+        }
+        draw() {
+            ctx.save(); ctx.beginPath(); ctx.arc(this.x, this.y, R, 0, Math.PI * 2);
+            if(marbleImg.complete && marbleImg.naturalWidth > 0) {
+                ctx.clip(); ctx.drawImage(marbleImg, this.x - R, this.y - R, R*2, R*2);
+            } else {
+                ctx.fillStyle = '#03a9f4'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = '#000'; ctx.stroke();
+            }
+            ctx.restore();
+        }
+        update() {
+            let pTopY = getPlungerTopY(); 
+
+            if (this.status === 'QUEUE') {
+                let targetX = waitEndX - (this.queueIndex * R * 2.2);
+                if (this.queueIndex === 0 && chamberState === 'EMPTY' && plungerDown > R) {
+                    this.status = 'LOADING'; chamberState = 'LOADING'; chamberBall = this;
+                } else {
+                    this.x += (targetX - this.x) * 0.15; this.y = queueY;
+                }
+                return;
+            }
+            
+            if (this.status === 'LOADING') {
+                this.x += (shootX - this.x) * 0.2;
+                this.y += ((pTopY - R + 2) - this.y) * 0.2; 
+                if (Math.abs(this.x - shootX) < 1) {
+                    this.x = shootX; this.status = 'READY'; chamberState = 'READY';
+                }
+                return;
+            }
+
+            if (this.status === 'READY') {
+                this.x = shootX; this.y = pTopY - R + 2; 
+                return;
+            }
+            
+            if (this.status === 'DONE') return;
+
+            // --- 飛行物理 ---
+            this.vy += GRAVITY; 
+            this.vx *= FRICTION; this.vy *= FRICTION;
+            this.x += this.vx; this.y += this.vy;
+
+            if (this.status === 'FIRE' && chamberState === 'FIRED' && chamberBall === this) {
+                if (this.y < H * 0.5) {
+                    chamberState = 'EMPTY'; chamberBall = null;
+                    balls.forEach(b => { if (b.status === 'QUEUE') b.queueIndex--; });
+                }
+            }
+
+            if (!this.inMainBoard) {
+                if (this.y > H * 0.18) {
+                    this.x = shootX; this.vx = 0;
+                    if (this.vy > 0 && this.y >= pTopY - R) {
+                        this.y = pTopY - R; this.vy = 0; this.vx = 0;
+                        this.status = 'READY'; chamberState = 'READY'; chamberBall = this;
+                    }
+                } else {
+                    this.inMainBoard = true;
+                    let leftPush = (W * 0.015) + (Math.random() * W * 0.025); 
+                    this.vx = -leftPush;
+                    this.vy = -(H * 0.005) - (Math.random() * H * 0.015);
+                    
+                    if (chamberState === 'FIRED' && chamberBall === this) {
+                        chamberState = 'EMPTY'; chamberBall = null;
+                        balls.forEach(b => { if (b.status === 'QUEUE') b.queueIndex--; });
+                    }
+                }
+            }
+
+            if (this.inMainBoard) {
+                if (this.x < L_WALL + R) { this.x = L_WALL + R; this.vx *= -BOUNCE; }
+                if (this.x > R_WALL - R && this.y > H * 0.15) { this.x = R_WALL - R; this.vx *= -BOUNCE; }
+                if (this.y < R + H * 0.03) { this.y = R + H * 0.03; this.vy *= -BOUNCE * 0.8; }
+
+                if (this.y <= DOME_Y) {
+                    let dxC = this.x - DOME_X; let dyC = this.y - DOME_Y; let distC = Math.sqrt(dxC*dxC + dyC*dyC);
+                    if (distC < DOME_R + R) {
+                        let angle = Math.atan2(dyC, dxC); let speed = Math.sqrt(this.vx*this.vx + this.vy*this.vy);
+                        this.vx = Math.cos(angle) * speed * BOUNCE; this.vy = Math.sin(angle) * speed * BOUNCE;
+                        this.x = DOME_X + Math.cos(angle) * (DOME_R + R + 1); this.y = DOME_Y + Math.sin(angle) * (DOME_R + R + 1);
+                    }
+                } else {
+                    let domeLeft = DOME_X - DOME_R; let domeRight = DOME_X + DOME_R;
+                    if (this.x > domeLeft - R && this.x < DOME_X) { this.x = domeLeft - R; this.vx *= -BOUNCE; } 
+                    else if (this.x < domeRight + R && this.x > DOME_X) { this.x = domeRight + R; this.vx *= -BOUNCE; }
+                }
+
+                pegs.forEach(p => {
+                    let dx = this.x - p.x; let dy = this.y - p.y; let dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < R + p.r) {
+                        let angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.8; 
+                        let speed = Math.sqrt(this.vx*this.vx + this.vy*this.vy);
+                        this.vx = Math.cos(angle) * speed * BOUNCE; this.vy = Math.sin(angle) * speed * BOUNCE;
+                        this.x = p.x + Math.cos(angle) * (R + p.r + 1); this.y = p.y + Math.sin(angle) * (R + p.r + 1);
+                    }
+                });
+
+                if (this.y > POCKET_FLOOR - R) {
+                    this.y = POCKET_FLOOR - R; 
+                    if (this.vy > H * 0.01) { this.vy *= -BOUNCE * 0.4; } else { this.vy = 0; }
+                    this.vx *= 0.85; 
+                }
+            }
+
+            if (Math.abs(this.vx) < 0.2) this.vx = 0;
+            if (Math.abs(this.vy) < 0.2) this.vy = 0;
+            if (this.vx === 0 && this.vy === 0 && this.y > H * 0.5) {
+                this.sleepFrames++;
+                if (this.sleepFrames > 20) this.status = 'DONE';
+            } else {
+                this.sleepFrames = 0;
+            }
+        }
+    }
+
+    function handleBallCollisions() {
+        for (let i = 0; i < balls.length; i++) {
+            for (let j = i + 1; j < balls.length; j++) {
+                let b1 = balls[i], b2 = balls[j];
+                if (b1.status === 'QUEUE' || b1.status === 'LOADING' || b2.status === 'QUEUE' || b2.status === 'LOADING') continue;
+                if (b1.status === 'READY' || b2.status === 'READY') continue;
+                
+                let dx = b2.x - b1.x; let dy = b2.y - b1.y;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist < R * 2) {
+                    let angle = Math.atan2(dy, dx);
+                    let overlap = (R * 2 - dist) * 0.5;
+                    b1.x -= Math.cos(angle) * overlap; b1.y -= Math.sin(angle) * overlap;
+                    b2.x += Math.cos(angle) * overlap; b2.y += Math.sin(angle) * overlap;
+                    
+                    let tx = b1.vx, ty = b1.vy;
+                    b1.vx = b2.vx * BOUNCE; b1.vy = b2.vy * BOUNCE;
+                    b2.vx = tx * BOUNCE; b2.vy = ty * BOUNCE;
+                    
+                    if(b1.status === 'DONE') b1.status = 'FIRE';
+                    if(b2.status === 'DONE') b2.status = 'FIRE';
+                }
+            }
+        }
+    }
+
+    function startGame(count) {
+        totalBalls = count; balls = []; gameState = 'PLAY'; plungerDown = 0;
+        chamberState = 'EMPTY'; chamberBall = null; lastFireTime = 0;
+        document.getElementById('question-panel').style.display = 'none'; hideKeyboard();
+        for (let i = 0; i < totalBalls; i++) balls.push(new Ball(i, i));
+    }
+
+    let dragY = 0, isDragging = false, maxPull = 0;
+
+    function handleDragStart(y) {
+        if (gameState !== 'PLAY') return;
+        isDragging = true; dragY = y; plunger.style.transition = 'none';
+        maxPull = window.innerHeight * 0.15; 
+    }
+    
+    function handleDragMove(y) {
+        if (!isDragging) return;
+        let dy = y - dragY;
+        if (dy >= 0 && dy < maxPull) { 
+            plungerDown = dy;
+            plunger.style.transform = `translateY(${dy}px)`; 
+        }
+    }
+    
+    function handleDragEnd() {
+        if (!isDragging) return;
+        isDragging = false;
+        
+        let force = plungerDown;
+        plungerDown = 0;
+        plunger.style.transition = 'transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+        plunger.style.transform = `translateY(0px)`;
+        
+        if (chamberState === 'READY' && chamberBall && force > H * 0.02) {
+            chamberBall.status = 'FIRE'; chamberState = 'FIRED';
+            chamberBall.vy = -(H * 0.065) - ((force / maxPull) * H * 0.04);
+            lastFireTime = Date.now(); 
+        } 
+    }
+
+    plunger.addEventListener('mousedown', (e) => { e.preventDefault(); handleDragStart(e.clientY); });
+    window.addEventListener('mousemove', (e) => { if(isDragging) handleDragMove(e.clientY); });
+    window.addEventListener('mouseup', handleDragEnd);
+
+    plunger.addEventListener('touchstart', (e) => { e.preventDefault(); handleDragStart(e.touches[0].clientY); }, {passive: false});
+    window.addEventListener('touchmove', (e) => { if(isDragging) handleDragMove(e.touches[0].clientY); }, {passive: false});
+    window.addEventListener('touchend', handleDragEnd);
+
+    function showQuestionPanel() {
+        document.getElementById('question-panel').style.display = 'block';
+        document.querySelector('.split-layout').style.display = 'flex';
+        
+        document.getElementById('question-text').innerText = `${totalBalls}可以分成多少和多少？`;
+        document.getElementById('box-top').innerText = ''; document.getElementById('box-left').innerText = ''; document.getElementById('box-right').innerText = '';
+        document.getElementById('feedback').style.display = 'none'; 
+        document.getElementById('play-again-btn').style.display = 'none'; document.getElementById('check-ans-btn').style.display = 'inline-block';
+        document.querySelectorAll('.box').forEach(el => el.classList.remove('active')); activeBox = null;
+    }
+
+    function selectBox(boxId) {
+        document.querySelectorAll('.box').forEach(el => el.classList.remove('active'));
+        activeBox = document.getElementById(boxId); activeBox.classList.add('active');
+        document.getElementById('keyboard-area').classList.add('open');
+    }
+
+    function hideKeyboard() {
+        document.getElementById('keyboard-area').classList.remove('open');
+        document.querySelectorAll('.box').forEach(el => el.classList.remove('active'));
+        activeBox = null; isCustomMode = false;
+    }
+
+    function pressKey(val) {
+        if (isCustomMode) { if (val !== 'del' && val > 0 && val <= 10) startGame(val); return; }
+        if (!activeBox) return;
+        if (val === 'del') { 
+            activeBox.innerText = ''; 
+        } else {
+            activeBox.innerText = (val === 10) ? '10' : val.toString();
+            hideKeyboard(); 
+        }
+    }
+
+    function verifyAnswer() {
+        let vTop = parseInt(document.getElementById('box-top').innerText);
+        let vLeft = parseInt(document.getElementById('box-left').innerText);
+        let vRight = parseInt(document.getElementById('box-right').innerText);
+        let fb = document.getElementById('feedback');
+
+        if (isNaN(vTop) || isNaN(vLeft) || isNaN(vRight)) { 
+            fb.innerText = '請把三個空格都填滿喔！'; 
+            fb.style.backgroundColor = '#ffebee'; fb.style.color = '#c62828'; fb.style.border = '2px solid #ef5350';
+            fb.style.display = 'block';
+            return; 
+        }
+
+        if (vTop === totalBalls && (vLeft + vRight === vTop)) {
+            fb.innerText = '答對了！你真厲害！'; 
+            fb.style.backgroundColor = '#e8f5e9'; fb.style.color = '#2e7d32'; fb.style.border = '2px solid #66bb6a';
+            fb.style.display = 'block';
+            document.getElementById('check-ans-btn').style.display = 'none'; 
+            document.getElementById('play-again-btn').style.display = 'inline-block';
+            hideKeyboard();
+        } else { 
+            fb.innerText = '哎呀，不對喔，再想想看！'; 
+            fb.style.backgroundColor = '#ffebee'; fb.style.color = '#c62828'; fb.style.border = '2px solid #ef5350';
+            fb.style.display = 'block'; 
+        }
+    }
+
+    function openCustomMode() {
+        isCustomMode = true; document.getElementById('keyboard-area').classList.add('open');
+        document.getElementById('question-panel').style.display = 'block';
+        document.getElementById('question-text').innerText = '請點擊下方鍵盤選擇彈珠數量 (1~10)';
+        document.querySelector('.split-layout').style.display = 'none';
+        document.getElementById('check-ans-btn').style.display = 'none'; document.getElementById('play-again-btn').style.display = 'none';
+        document.getElementById('feedback').style.display = 'none';
+    }
+
+    function loop() {
+        ctx.clearRect(0, 0, W, H);
+        handleBallCollisions(); 
+        
+        balls.forEach(b => { b.update(); b.draw(); });
+
+        let allOut = balls.every(b => b.status === 'FIRE' || b.status === 'DONE');
+        if (allOut && gameState === 'PLAY' && balls.length > 0) {
+            let allSettled = balls.every(b => b.status === 'DONE');
+            if (allSettled || (Date.now() - lastFireTime > 4000)) {
+                gameState = 'ENDED'; 
+                setTimeout(showQuestionPanel, 500);
+            }
+        }
+
+        requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('load', () => {
+        updateSize();
+        startGame(5);
+        loop();
+    });
+</script>
+
+</body>
+</html>
